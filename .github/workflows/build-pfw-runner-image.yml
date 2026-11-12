@@ -1,0 +1,67 @@
+# Bakes Endor Labs Package Firewall config into custom GitHub-hosted runner
+# images. Runs weekly so the images pick up GitHub's base image patches, and on
+# demand. Each image is saved only if every step of its job succeeds, including
+# the install check. The ARM64 image is built only when the repository variable
+# PFW_ARM64 is "true".
+name: Build Package Firewall runner image
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-pfw-runner-image
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-image-x64:
+    if: ${{ github.event.repository.fork == false }}
+    runs-on:
+      group: ubuntu-latest-endor-builder
+    snapshot: ubuntu-latest-endor-image
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure Package Firewall
+        env:
+          ENDOR_NAMESPACE: ${{ vars.ENDOR_NAMESPACE }}
+          ENDOR_PFW_HOST: ${{ vars.ENDOR_PFW_HOST || 'factory.endorlabs.com' }}
+          ENDOR_API_KEY: ${{ secrets.ENDOR_PFW_API_KEY }}
+          ENDOR_API_SECRET: ${{ secrets.ENDOR_PFW_API_SECRET }}
+        run: bash scripts/configure-pfw.sh
+
+      - name: Verify before snapshot
+        run: bash scripts/verify-pfw.sh
+
+  build-image-arm64:
+    if: ${{ github.event.repository.fork == false && vars.PFW_ARM64 == 'true' }}
+    runs-on:
+      group: ubuntu-latest-arm-endor-builder
+    snapshot: ubuntu-latest-arm-endor-image
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure Package Firewall
+        env:
+          ENDOR_NAMESPACE: ${{ vars.ENDOR_NAMESPACE }}
+          ENDOR_PFW_HOST: ${{ vars.ENDOR_PFW_HOST || 'factory.endorlabs.com' }}
+          ENDOR_API_KEY: ${{ secrets.ENDOR_PFW_API_KEY }}
+          ENDOR_API_SECRET: ${{ secrets.ENDOR_PFW_API_SECRET }}
+        run: bash scripts/configure-pfw.sh
+
+      - name: Verify before snapshot
+        run: bash scripts/verify-pfw.sh

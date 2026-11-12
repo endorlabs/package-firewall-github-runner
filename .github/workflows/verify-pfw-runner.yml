@@ -1,0 +1,51 @@
+# Check of the job runners that use the published images.
+# No Endor credentials: the image supplies the firewall config.
+# Run this after the images have finished provisioning. The ARM64 runner is
+# checked only when the repository variable PFW_ARM64 is "true".
+name: Verify Package Firewall runner
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ vars.PFW_ARM64 == 'true' && fromJSON('["ubuntu-latest-endor","ubuntu-latest-arm-endor"]') || fromJSON('["ubuntu-latest-endor"]') }}
+        setup-actions: [false, true]
+    name: ${{ matrix.runner }}${{ matrix.setup-actions && ' after setup actions' || '' }}
+    runs-on:
+      group: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: ${{ matrix.setup-actions }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - if: ${{ matrix.setup-actions }}
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - if: ${{ matrix.setup-actions }}
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - if: ${{ matrix.setup-actions }}
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          add-job-summary: never
+      - name: Verify Package Firewall is enforced
+        run: bash scripts/verify-pfw.sh
